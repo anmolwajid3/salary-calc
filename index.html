@@ -1,0 +1,653 @@
+Uncaught ReferenceError: showTab is not defined<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>McD Shift Manager Salary Calculator (Finland)</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a2332; --border: #2d3a4f; --text: #e7ecf3;
+    --muted: #8b9bb4; --accent: #ffc72c; --accent2: #d70015; --good: #22c55e;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; line-height: 1.5; }
+  h1 { color: var(--accent); margin: 0 0 8px; font-size: 1.6rem; }
+  h2 { font-size: 1.2rem; margin: 1.2rem 0 0.6rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 3px; }
+  input, select, textarea { background: #0d1117; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 0.95rem; width: 100%; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+  .field { flex: 1; min-width: 130px; }
+  button { background: var(--accent); color: #111; border: none; font-weight: 600; cursor: pointer; padding: 10px 16px; width: auto; border-radius: 8px; }
+  button.secondary { background: #2d3a4f; color: var(--text); }
+  button.danger { background: var(--accent2); color: white; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .tabs { display: flex; gap: 32px; border-bottom: 1px solid #2d3a4f; margin-bottom: 20px; }
+  .tabs button { background: transparent !important; border: none; color: #8b9bb4; padding: 12px 0; font-size: 1rem; font-weight: 500; cursor: pointer; position: relative; border-radius: 0; }
+  .tabs button.active { color: #ffc72c; }
+  .tabs button.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: #ffc72c; border-radius: 2px; }
+  .date-wrapper { position: relative; }
+  .date-wrapper input[type="date"] { padding-right: 40px; }
+  .date-wrapper .cal-icon { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; width: 22px; height: 22px; color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th, td { padding: 7px 5px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
+  .badge-mgr { background: #1e3a8a; } .badge-crew { background: #14532d; }
+  .badge-double { background: #7f1d1d; } .badge-sick { background: #7c2d12; } .badge-cancelled { background: #444; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .summary-box { background: #111827; padding: 12px; border-radius: 8px; text-align: center; }
+  .summary-box .value { font-size: 1.35rem; font-weight: 700; color: var(--accent); }
+  .summary-box .label { font-size: 0.78rem; color: var(--muted); }
+  .notes { font-size: 0.8rem; color: var(--muted); }
+  textarea { min-height: 100px; font-family: monospace; font-size: 0.8rem; }
+  .small { width: 100px; }
+  .status { margin-top: 8px; font-size: 0.85rem; }
+  @media (max-width: 700px) { .row { flex-direction: column; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🍔 McD Shift Manager Salary Calculator</h1>
+  <p class="notes">Finland / MaRa rates. Double only on Sunday hours. AI image import + manual entry. Settings are in the tab below.</p>
+
+  <div class="tabs">
+    <button type="button" id="tabMain" class="active" onclick="showTab('main')">Main</button>
+    <button type="button" id="tabSettings" onclick="showTab('settings')">Settings</button>
+  </div>
+
+  <div id="tab-main">
+
+  <!-- IMPORT -->
+  <div class="card">
+    <h2>1. Import schedule screenshot(s)</h2>
+    <p class="notes">Upload 1–2 images from Vuorolistat.fi. The vision model will extract shifts as structured data. You can then edit everything before calculating.</p>
+    <div class="row">
+      <div class="field"><label>Images</label><input type="file" id="scheduleImages" accept="image/*" multiple></div>
+    </div>
+    <button id="extractBtn" onclick="extractWithLLM()">Extract shifts with AI</button>
+    <button class="secondary" onclick="loadExampleShifts()">Load verified example shifts</button>
+    <div id="extractStatus" class="status"></div>
+    <div id="llmResponse" style="display:none; margin-top:12px;">
+      <label>AI response (for verification)</label>
+      <textarea id="llmText" readonly></textarea>
+    </div>
+    <div id="proposedShifts"></div>
+  </div>
+
+  <!-- MANUAL -->
+  <div class="card">
+    <h2>Add a shift manually</h2>
+    <div class="row">
+      <div class="field"><label>Date</label>
+        <div class="date-wrapper">
+          <input type="date" id="shiftDate">
+          <span class="cal-icon" onclick="document.getElementById('shiftDate').showPicker?.() || document.getElementById('shiftDate').focus()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+          </span>
+        </div>
+      </div>
+      <div class="field"><label>Start time</label><input type="time" id="startTime" value="08:00"></div>
+      <div class="field"><label>End time</label><input type="time" id="endTime" value="16:00"></div>
+      <div class="field"><label>Role</label><select id="role"><option value="MGR">MGR</option><option value="Crew">Crew</option></select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label><input type="checkbox" id="isHoliday"> Holiday / special double</label></div>
+      <div class="field"><label><input type="checkbox" id="isSick"> Sick leave (70%)</label></div>
+      <div class="field"><label><input type="checkbox" id="isCancelled"> Cancelled / not going</label></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Notes (optional)</label><input type="text" id="notes" placeholder="swap, extra, stay-over…"></div>
+    </div>
+    <button onclick="addShift()">Add Shift</button>
+  </div>
+
+  <!-- PERIOD -->
+  <div class="card">
+    <h2>Pay period</h2>
+    <div class="row">
+      <div class="field"><label>Month</label>
+        <select id="periodMonth">
+          <option value="0">January</option><option value="1">February</option><option value="2">March</option>
+          <option value="3">April</option><option value="4">May</option><option value="5">June</option>
+          <option value="6">July</option><option value="7">August</option><option value="8">September</option>
+          <option value="9">October</option><option value="10">November</option><option value="11">December</option>
+        </select>
+      </div>
+      <div class="field"><label>Year</label><input type="number" id="periodYear" value="2026" min="2020" max="2030"></div>
+      <div class="field" style="align-self:flex-end"><button onclick="applyMonthPeriod()">Set period (1st → last day)</button></div>
+    </div>
+    <p class="notes" id="periodLabel"></p>
+  </div>
+
+  <!-- SHIFTS -->
+  <div class="card">
+    <h2>2. Shifts</h2>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Date</th><th>Time</th><th>Role</th><th>Paid h</th><th>Eve h</th><th>Night h</th><th>Flags</th><th>Notes</th><th></th></tr></thead>
+        <tbody id="shiftsBody"></tbody>
+      </table>
+    </div>
+    <p class="notes" id="emptyMsg">No shifts yet.</p>
+    <div style="margin-top:12px">
+      <button onclick="calculate()">Calculate Salary</button>
+      <button class="secondary" onclick="exportCSV()">Export CSV</button>
+      <button class="danger" onclick="clearAll()">Clear all</button>
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="card" id="summaryCard" style="display:none">
+    <h2>Salary Summary</h2>
+    <div class="summary-grid" id="summaryGrid"></div>
+    <h3 style="margin-top:1.2rem">Breakdown</h3>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Date</th><th>Role</th><th>Paid h</th><th>Eve</th><th>Night</th><th>Pay</th></tr></thead>
+        <tbody id="breakdownBody"></tbody>
+        <tfoot><tr style="font-weight:700;background:#111827"><td colspan="5">TOTAL</td><td id="grandTotal">0</td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+  </div> <!-- end tab-main -->
+
+  <!-- SETTINGS TAB -->
+  <div id="tab-settings" style="display:none">
+    <div class="card">
+      <h2>Settings / Rates</h2>
+      <div class="row">
+        <div class="field"><label>Vision model</label>
+          <select id="model">
+            <option value="google/gemini-2.5-flash">Gemini 2.5 Flash (recommended)</option>
+            <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+            <option value="openai/gpt-4o-mini">GPT-4o mini</option>
+            <option value="openrouter/free">OpenRouter Free Auto</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Crew base €/h</label><input type="number" id="crewRate" step="0.01" value="12.64"></div>
+        <div class="field"><label>MGR base €/h</label><input type="number" id="mgrRate" step="0.01" value="14.73"></div>
+        <div class="field"><label>Evening allowance €/h</label><input type="number" id="eveningRate" step="0.01" value="1.40"></div>
+        <div class="field"><label>Night allowance €/h</label><input type="number" id="nightRate" step="0.01" value="2.37"></div>
+        <div class="field"><label>Double multiplier</label><input type="number" id="doubleMult" step="0.1" value="2"></div>
+        <div class="field"><label>Sick leave %</label><input type="number" id="sickPercent" value="70"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Evening window</label><input type="text" id="eveningWindow" value="18:00-24:00"></div>
+        <div class="field"><label>Night window</label><input type="text" id="nightWindow" value="00:00-06:00"></div>
+      </div>
+      <button onclick="saveSettings()">Save settings</button>
+      <div id="settingsStatus" class="status"></div>
+      <p class="notes" style="margin-top:12px">API key is embedded in the source. Edit the file and replace YOUR_OPENROUTER_KEY_HERE if you need to change it.</p>
+    </div>
+  </div>
+
+<script>
+// ========== EMBED YOUR OPENROUTER KEY HERE ==========
+const EMBEDDED_API_KEY = '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';
+// ====================================================
+
+const STORAGE_KEY = 'mcd_salary_v5';
+let shifts = [];
+let settings = {
+  apiKey: '', model: 'google/gemini-2.5-flash',
+  crewRate: 12.64, mgrRate: 14.73, eveningRate: 1.40, nightRate: 2.37,
+  doubleMult: 2, sickPercent: 70, eveningWindow: '18:00-24:00', nightWindow: '00:00-06:00'
+};
+let proposed = [];
+
+window.showTab = function(name) {
+  const main = document.getElementById('tab-main');
+  const settings = document.getElementById('tab-settings');
+  const btnMain = document.getElementById('tabMain');
+  const btnSet = document.getElementById('tabSettings');
+  if (!main || !settings) return;
+  main.style.display = name === 'main' ? 'block' : 'none';
+  settings.style.display = name === 'settings' ? 'block' : 'none';
+  if (btnMain) btnMain.classList.toggle('active', name === 'main');
+  if (btnSet) btnSet.classList.toggle('active', name === 'settings');
+};
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      shifts = data.shifts || [];
+      settings = { ...settings, ...data.settings };
+    }
+  } catch (e) {}
+  applySettings();
+  renderShifts();
+}
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify({ shifts, settings })); }
+function applySettings() {
+  document.getElementById('model').value = settings.model;
+  document.getElementById('crewRate').value = settings.crewRate;
+  document.getElementById('mgrRate').value = settings.mgrRate;
+  document.getElementById('eveningRate').value = settings.eveningRate;
+  document.getElementById('nightRate').value = settings.nightRate;
+  document.getElementById('doubleMult').value = settings.doubleMult;
+  document.getElementById('sickPercent').value = settings.sickPercent;
+  document.getElementById('eveningWindow').value = settings.eveningWindow;
+  document.getElementById('nightWindow').value = settings.nightWindow;
+}
+function saveSettings() {
+  settings.model = document.getElementById('model').value;
+  settings.crewRate = parseFloat(document.getElementById('crewRate').value) || 12.64;
+  settings.mgrRate = parseFloat(document.getElementById('mgrRate').value) || 14.73;
+  settings.eveningRate = parseFloat(document.getElementById('eveningRate').value) || 1.40;
+  settings.nightRate = parseFloat(document.getElementById('nightRate').value) || 2.37;
+  settings.doubleMult = parseFloat(document.getElementById('doubleMult').value) || 2;
+  settings.sickPercent = parseFloat(document.getElementById('sickPercent').value) || 70;
+  settings.eveningWindow = document.getElementById('eveningWindow').value || '18:00-24:00';
+  settings.nightWindow = document.getElementById('nightWindow').value || '00:00-06:00';
+  save();
+  document.getElementById('settingsStatus').textContent = 'Saved ✓';
+  setTimeout(() => document.getElementById('settingsStatus').textContent = '', 2000);
+}
+
+function timeToMinutes(t) { if (!t) return 0; const [h,m]=t.split(':').map(Number); return h*60+m; }
+function durationHours(start, end) { let s=timeToMinutes(start), e=timeToMinutes(end); if (e<=s) e+=24*60; return (e-s)/60; }
+
+function hoursInWindow(start, end, winStart, winEnd) {
+  // winStart/winEnd in minutes, winEnd can be next day
+  let s = timeToMinutes(start), e = timeToMinutes(end);
+  if (e <= s) e += 24*60;
+  let total = 0;
+  const ws = timeToMinutes(winStart), we = timeToMinutes(winEnd);
+  const windows = [];
+  if (we > ws) windows.push([ws, we]);
+  else { windows.push([ws, 24*60]); windows.push([0, we]); }
+  for (const [w1, w2] of windows) {
+    for (let d = -1; d <= 1; d++) {
+      const os = Math.max(s, w1 + d*24*60);
+      const oe = Math.min(e, w2 + d*24*60);
+      if (oe > os) total += oe - os;
+    }
+  }
+  return total / 60;
+}
+
+function sundayHours(start, end, dateStr) {
+  // Returns hours of the shift that fall on Sunday (00:01–23:59 Sunday)
+  const baseDate = new Date(dateStr + 'T00:00:00');
+  let s = timeToMinutes(start);
+  let e = timeToMinutes(end);
+  if (e <= s) e += 24 * 60;
+  let sundayMins = 0;
+  // Walk in 1-minute steps is slow; use day boundaries
+  const totalMins = e - s;
+  for (let offset = 0; offset < totalMins; offset += 60) { // hour chunks for speed
+    const absMin = s + offset;
+    const dayOffset = Math.floor(absMin / (24 * 60));
+    const d = new Date(baseDate);
+    d.setDate(d.getDate() + dayOffset);
+    if (d.getDay() === 0) {
+      const chunk = Math.min(60, totalMins - offset);
+      sundayMins += chunk;
+    }
+  }
+  return sundayMins / 60;
+}
+
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function extractWithLLM() {
+  const key = EMBEDDED_API_KEY;
+  if (!key || key === 'YOUR_OPENROUTER_KEY_HERE') return alert('API key not embedded. Open the HTML file and replace YOUR_OPENROUTER_KEY_HERE with your OpenRouter key.');
+  const files = document.getElementById('scheduleImages').files;
+  if (!files.length) return alert('Select at least one image.');
+  const btn = document.getElementById('extractBtn');
+  const status = document.getElementById('extractStatus');
+  btn.disabled = true;
+  status.textContent = 'Sending images to vision model…';
+  try {
+    const content = [
+      { type: 'text', text: `You are extracting work shifts from Finnish McDonald's Vuorolistat.fi schedule screenshots.
+Extract every actual work shift (ignore OL, V, X, empty cells, on-leave).
+Return ONLY a valid JSON array of objects with these exact keys:
+- date: YYYY-MM-DD (infer year and month from the period header, e.g. 7.9.2026 - 27.9.2026)
+- start: HH:MM (24h, convert 1030 → 10:30, 2300 → 23:00)
+- end: HH:MM (if overnight like 2300-0700, end is 07:00 next day; if 0000 then 00:00)
+- role: "MGR" or "Crew"
+- holiday: true if the day is highlighted as special/orange/red beyond normal weekend, otherwise false
+Weekdays: Ma=Monday, Ti=Tuesday, Ke=Wednesday, To=Thursday, Pe=Friday, La=Saturday, Su=Sunday.
+Return nothing else, only the JSON array.` }
+    ];
+    for (const file of files) {
+      const b64 = await fileToBase64(file);
+      content.push({ type: 'image_url', image_url: { url: b64 } });
+    }
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + key,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': location.href,
+        'X-Title': 'McD Salary Calculator'
+      },
+      body: JSON.stringify({
+        model: settings.model || 'google/gemini-2.5-flash',
+        messages: [{ role: 'user', content }],
+        temperature: 0.1,
+        max_tokens: 4000
+      })
+    });
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(resp.status + ' ' + err.slice(0, 300));
+    }
+    const data = await resp.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    document.getElementById('llmText').value = text;
+    document.getElementById('llmResponse').style.display = 'block';
+    status.textContent = 'Done. Review the AI response and proposed shifts below.';
+    parseLLMResponse(text);
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+    alert('Extraction failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function parseLLMResponse(text) {
+  proposed = [];
+  let jsonStr = text.trim();
+  const m = jsonStr.match(/\[[\s\S]*\]/);
+  if (m) jsonStr = m[0];
+  try {
+    const arr = JSON.parse(jsonStr);
+    if (Array.isArray(arr)) {
+      const seen = new Set();
+      arr.forEach(item => {
+        if (item.date && item.start && item.end && item.role) {
+          const key = item.date + '|' + item.start + '|' + item.end + '|' + item.role;
+          if (seen.has(key)) return; // skip exact duplicates
+          seen.add(key);
+          proposed.push({
+            date: item.date,
+            start: item.start,
+            end: item.end,
+            role: (item.role || '').toUpperCase() === 'MGR' ? 'MGR' : 'Crew',
+            holiday: !!item.holiday,
+            notes: 'AI extracted – please verify',
+            sick: false,
+            cancelled: false
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  renderProposed();
+  if (!proposed.length) {
+    document.getElementById('proposedShifts').innerHTML = '<p class="notes">Could not parse JSON from the AI response. Check the raw response above and try again, or use the example loader / manual entry.</p>';
+  }
+}
+
+function renderProposed() {
+  const div = document.getElementById('proposedShifts');
+  if (!proposed.length) { div.innerHTML = ''; return; }
+  let html = `<h3>Proposed shifts – edit if needed, then add</h3>
+    <table><thead><tr><th>Date</th><th>Start</th><th>End</th><th>Role</th><th>Holiday</th><th>Sick</th><th>Cancel</th><th>Notes</th><th></th></tr></thead><tbody>`;
+  proposed.forEach((p, i) => {
+    html += `<tr>
+      <td><input type="date" id="pd${i}" value="${p.date}" class="small"></td>
+      <td><input type="time" id="ps${i}" value="${p.start}" class="small"></td>
+      <td><input type="time" id="pe${i}" value="${p.end}" class="small"></td>
+      <td><select id="pr${i}"><option ${p.role==='MGR'?'selected':''}>MGR</option><option ${p.role==='Crew'?'selected':''}>Crew</option></select></td>
+      <td><input type="checkbox" id="ph${i}" ${p.holiday?'checked':''}></td>
+      <td><input type="checkbox" id="psk${i}"></td>
+      <td><input type="checkbox" id="pc${i}"></td>
+      <td><input type="text" id="pn${i}" value="${p.notes||''}" style="width:140px"></td>
+      <td><button onclick="addProposed(${i})">Add</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table><button onclick="addAllProposed()">Add all</button>';
+  div.innerHTML = html;
+}
+
+function addProposed(i) {
+  const date = document.getElementById('pd'+i).value;
+  if (!date) return alert('Date required');
+  shifts.push({
+    id: Date.now() + Math.random(),
+    date,
+    start: document.getElementById('ps'+i).value,
+    end: document.getElementById('pe'+i).value,
+    role: document.getElementById('pr'+i).value,
+    holiday: document.getElementById('ph'+i).checked,
+    sick: document.getElementById('psk'+i).checked,
+    cancelled: document.getElementById('pc'+i).checked,
+    notes: document.getElementById('pn'+i).value,
+    actualHours: null
+  });
+  shifts.sort((a,b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+  save(); renderShifts();
+  proposed.splice(i, 1); renderProposed();
+}
+function addAllProposed() {
+  for (let i = proposed.length - 1; i >= 0; i--) addProposed(i);
+}
+
+function loadExampleShifts() {
+  const examples = [
+    {date:'2026-09-07',start:'10:30',end:'18:30',role:'MGR'},
+    {date:'2026-09-08',start:'23:00',end:'07:00',role:'MGR'},
+    {date:'2026-09-09',start:'23:00',end:'07:00',role:'MGR'},
+    {date:'2026-09-12',start:'13:30',end:'21:00',role:'Crew'},
+    {date:'2026-09-13',start:'12:00',end:'20:00',role:'Crew'},
+    {date:'2026-09-14',start:'23:00',end:'07:00',role:'MGR'},
+    {date:'2026-09-15',start:'23:00',end:'07:00',role:'MGR'},
+    {date:'2026-09-20',start:'23:00',end:'07:00',role:'MGR'},
+    {date:'2026-09-21',start:'23:00',end:'07:00',role:'MGR'},
+    {date:'2026-09-25',start:'15:00',end:'22:30',role:'Crew'},
+    {date:'2026-09-26',start:'14:00',end:'22:00',role:'Crew'},
+    {date:'2026-09-27',start:'14:00',end:'21:00',role:'Crew'},
+    {date:'2026-09-28',start:'23:00',end:'07:00',role:'MGR'},
+    {date:'2026-09-29',start:'23:00',end:'07:00',role:'MGR'},
+    {date:'2026-10-15',start:'15:30',end:'23:30',role:'MGR'},
+    {date:'2026-10-16',start:'17:00',end:'00:00',role:'Crew'},
+    {date:'2026-10-17',start:'14:00',end:'22:00',role:'Crew'},
+    {date:'2026-10-18',start:'15:30',end:'23:30',role:'MGR'}
+  ];
+  examples.forEach(e => {
+    shifts.push({ id:Date.now()+Math.random(), ...e, holiday:false, sick:false, cancelled:false, notes:'verified example', actualHours:null });
+  });
+  shifts.sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start));
+  save(); renderShifts();
+  alert('Example shifts loaded. Edit any of them and calculate.');
+}
+
+function addShift() {
+  const date = document.getElementById('shiftDate').value;
+  const start = document.getElementById('startTime').value;
+  const end = document.getElementById('endTime').value;
+  if (!date || !start || !end) return alert('Fill date and times');
+  shifts.push({
+    id: Date.now()+Math.random(),
+    date, start, end,
+    role: document.getElementById('role').value,
+    holiday: document.getElementById('isHoliday').checked,
+    sick: document.getElementById('isSick').checked,
+    cancelled: document.getElementById('isCancelled').checked,
+    notes: document.getElementById('notes').value.trim(),
+    actualHours: null
+  });
+  shifts.sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start));
+  save(); renderShifts();
+  document.getElementById('shiftDate').value = '';
+  document.getElementById('notes').value = '';
+  document.getElementById('isHoliday').checked = false;
+  document.getElementById('isSick').checked = false;
+  document.getElementById('isCancelled').checked = false;
+}
+
+function deleteShift(id) {
+  if (!confirm('Delete?')) return;
+  shifts = shifts.filter(s => s.id !== id); save(); renderShifts();
+}
+function toggleFlag(id, flag) {
+  const s = shifts.find(x => x.id === id); if (!s) return;
+  s[flag] = !s[flag]; save(); renderShifts();
+}
+function renderShifts() {
+  const tbody = document.getElementById('shiftsBody');
+  const from = window.periodFrom || '';
+  const to = window.periodTo || '';
+  const filtered = shifts.filter(s => (!from || s.date >= from) && (!to || s.date <= to));
+  tbody.innerHTML = '';
+  document.getElementById('emptyMsg').style.display = filtered.length ? 'none' : 'block';
+  const eveWin = (settings.eveningWindow || '18:00-24:00').split('-');
+  const nightWin = (settings.nightWindow || '00:00-06:00').split('-');
+  filtered.forEach(s => {
+    const dur = durationHours(s.start, s.end);
+    let paid = s.actualHours != null ? s.actualHours : dur;
+    if (paid >= 6 && !s.cancelled) paid = Math.max(0, paid - 0.5);
+    if (s.cancelled) paid = 0;
+    const eve = s.cancelled ? 0 : Math.min(hoursInWindow(s.start, s.end, eveWin[0], eveWin[1]), paid);
+    const night = s.cancelled ? 0 : Math.min(hoursInWindow(s.start, s.end, nightWin[0], nightWin[1]), paid);
+    let flags = '';
+    if (s.sick) flags += '<span class="badge badge-sick">Sick</span> ';
+    if (s.cancelled) flags += '<span class="badge badge-cancelled">Cancelled</span> ';
+    if (sundayHours(s.start, s.end, s.date) > 0) flags += '<span class="badge badge-double">2×</span>';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${s.date}</td>
+      <td>${s.start}–${s.end}</td>
+      <td><span class="badge badge-${s.role.toLowerCase()}">${s.role}</span></td>
+      <td>${paid.toFixed(2)}</td>
+      <td>${eve.toFixed(2)}</td>
+      <td>${night.toFixed(2)}</td>
+      <td>${flags || '—'}</td>
+      <td class="notes">${s.notes||''}</td>
+      <td>
+        <button class="secondary" style="padding:3px 6px;font-size:0.75rem" onclick="toggleFlag(${s.id},'sick')">Sick</button>
+        <button class="secondary" style="padding:3px 6px;font-size:0.75rem" onclick="toggleFlag(${s.id},'cancelled')">Cancel</button>
+        <button class="danger" style="padding:3px 6px;font-size:0.75rem" onclick="deleteShift(${s.id})">✕</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function applyMonthPeriod() {
+  const month = parseInt(document.getElementById('periodMonth').value, 10);
+  const year = parseInt(document.getElementById('periodYear').value, 10);
+  const from = new Date(year, month, 1);
+  const to = new Date(year, month + 1, 0);
+  window.periodFrom = from.toISOString().slice(0, 10);
+  window.periodTo = to.toISOString().slice(0, 10);
+  document.getElementById('periodLabel').textContent = `Period: ${window.periodFrom} → ${window.periodTo}`;
+  renderShifts();
+}
+
+function calculate() {
+  const taxInput = prompt('Enter tax percentage to deduct (e.g. 20 for 20%). Leave empty or 0 for no tax.', '0');
+  if (taxInput === null) return; // cancelled
+  const taxPct = parseFloat(taxInput) || 0;
+  const from = window.periodFrom || '';
+  const to = window.periodTo || '';
+  const filtered = shifts.filter(s => (!from || s.date >= from) && (!to || s.date <= to));
+  if (!filtered.length) return alert('No shifts in the selected period.');
+  const crew = settings.crewRate, mgr = settings.mgrRate, eveR = settings.eveningRate, nightR = settings.nightRate;
+  const mult = settings.doubleMult, sickPct = settings.sickPercent / 100;
+  const eveWin = (settings.eveningWindow || '18:00-24:00').split('-');
+  const nightWin = (settings.nightWindow || '00:00-06:00').split('-');
+  let totalPay = 0, totalPaid = 0, totalEve = 0, totalNight = 0, totalDouble = 0, totalSick = 0;
+  const rows = [];
+  filtered.forEach(s => {
+    if (s.cancelled) {
+      rows.push({ date:s.date, role:s.role, paid:0, eve:0, night:0, pay:0, double:false, sick:false });
+      return;
+    }
+    const dur = durationHours(s.start, s.end);
+    let paid = s.actualHours != null ? s.actualHours : dur;
+    if (paid >= 6) paid = Math.max(0, paid - 0.5);
+    const eve = Math.min(hoursInWindow(s.start, s.end, eveWin[0], eveWin[1]), paid);
+    const night = Math.min(hoursInWindow(s.start, s.end, nightWin[0], nightWin[1]), paid);
+    // Double only the actual Sunday hours (or full shift if marked holiday AND the whole shift is on the holiday day)
+    const sunHours = sundayHours(s.start, s.end, s.date);
+    const doubleHours = s.holiday ? Math.max(sunHours, /* if holiday flag, still prefer precise Sunday unless user wants full */ sunHours) : sunHours;
+    // For this restaurant: double only hours that fall on Sunday. Holiday flag is informational.
+    let hourly = s.role === 'MGR' ? mgr : crew;
+    let pay = (paid - sunHours) * hourly + sunHours * hourly * mult + eve * eveR + night * nightR;
+    if (s.sick) { pay *= sickPct; totalSick += pay; }
+    totalPay += pay;
+    totalPaid += paid;
+    totalEve += eve;
+    totalNight += night;
+    if (sunHours > 0) totalDouble += sunHours;
+    rows.push({ date:s.date, role:s.role, paid, eve, night, pay, double:sunHours > 0, sick:s.sick });
+  });
+  const netPay = totalPay * (1 - taxPct / 100);
+  document.getElementById('summaryGrid').innerHTML = `
+    <div class="summary-box"><div class="value">${totalPaid.toFixed(2)}</div><div class="label">Paid hours</div></div>
+    <div class="summary-box"><div class="value">${totalEve.toFixed(2)}</div><div class="label">Evening hours</div></div>
+    <div class="summary-box"><div class="value">${totalNight.toFixed(2)}</div><div class="label">Night hours</div></div>
+    <div class="summary-box"><div class="value">${totalDouble.toFixed(2)}</div><div class="label">Double-pay hours</div></div>
+    <div class="summary-box"><div class="value">€${totalSick.toFixed(2)}</div><div class="label">Sick leave pay</div></div>
+    <div class="summary-box"><div class="value">€${totalPay.toFixed(2)}</div><div class="label">Gross salary</div></div>
+    <div class="summary-box"><div class="value">€${netPay.toFixed(2)}</div><div class="label">Net after ${taxPct}% tax</div></div>
+  `;
+  const bbody = document.getElementById('breakdownBody');
+  bbody.innerHTML = '';
+  rows.forEach(r => {
+    let role = r.role;
+    if (r.double) role += ' <span class="badge badge-double">2×</span>';
+    if (r.sick) role += ' <span class="badge badge-sick">Sick</span>';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.date}</td><td>${role}</td><td>${r.paid.toFixed(2)}</td><td>${r.eve.toFixed(2)}</td><td>${r.night.toFixed(2)}</td><td><strong>€${r.pay.toFixed(2)}</strong></td>`;
+    bbody.appendChild(tr);
+  });
+  document.getElementById('grandTotal').textContent = '€' + netPay.toFixed(2) + ' net';
+  document.getElementById('summaryCard').style.display = 'block';
+  document.getElementById('summaryCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+function exportCSV() {
+  const from = window.periodFrom || '', to = window.periodTo || '';
+  const filtered = shifts.filter(s => (!from || s.date >= from) && (!to || s.date <= to));
+  if (!filtered.length) return alert('Nothing to export');
+  let csv = 'Date,Start,End,Role,Holiday,Sick,Cancelled,Notes\n';
+  filtered.forEach(s => {
+    csv += `${s.date},${s.start},${s.end},${s.role},${s.holiday},${s.sick},${s.cancelled},"${(s.notes||'').replace(/"/g,'""')}"\n`;
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'mcd_shifts.csv';
+  a.click();
+}
+function clearAll() {
+  if (!confirm('Delete all shifts?')) return;
+  shifts = []; save(); renderShifts();
+  document.getElementById('summaryCard').style.display = 'none';
+}
+load();
+const now = new Date();
+document.getElementById('periodMonth').value = now.getMonth();
+document.getElementById('periodYear').value = now.getFullYear();
+applyMonthPeriod();
+showTab('main');
+</script>
+</body>
+</html>
