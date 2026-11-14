@@ -1,4 +1,4 @@
-Uncaught ReferenceError: showTab is not defined<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -194,7 +194,7 @@ Uncaught ReferenceError: showTab is not defined<!DOCTYPE html>
 
 <script>
 // ========== EMBED YOUR OPENROUTER KEY HERE ==========
-const EMBEDDED_API_KEY = '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';
+const EMBEDDED_API_KEY = 'YOUR_OPENROUTER_KEY_HERE';
 // ====================================================
 
 const STORAGE_KEY = 'mcd_salary_v5';
@@ -312,7 +312,10 @@ async function fileToBase64(file) {
 
 async function extractWithLLM() {
   const key = EMBEDDED_API_KEY;
-  if (!key || key === 'YOUR_OPENROUTER_KEY_HERE') return alert('API key not embedded. Open the HTML file and replace YOUR_OPENROUTER_KEY_HERE with your OpenRouter key.');
+  if (!key || key.includes('YOUR_OPENROUTER') || key.length < 20) {
+    alert('OpenRouter key is missing or invalid. Open the HTML source and set EMBEDDED_API_KEY to your real sk-or-v1-... key.');
+    return;
+  }
   const files = document.getElementById('scheduleImages').files;
   if (!files.length) return alert('Select at least one image.');
   const btn = document.getElementById('extractBtn');
